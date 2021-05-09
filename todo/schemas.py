@@ -62,12 +62,12 @@ class CreateTodo(graphene.Mutation):
 
 	@classmethod
 	def mutate(cls,root,info,place,title,date_time):
-		return Todo.objects.create(
+		return CreateTodo(todo=Todo.objects.create(
 			place=place,
 			title = title,
 			date_time=date_time,
 			user=info.context.user
-		)
+		))
 
 class UpdateTodo(graphene.Mutation):
 	todo = graphene.Field(TodoType)
@@ -86,7 +86,7 @@ class UpdateTodo(graphene.Mutation):
 		todo.date_time = date_time
 		todo.save()
 
-		return todo
+		return UpdateTodo(todo=todo)
 
 
 class Mutations(AuthMutation, graphene.ObjectType):
