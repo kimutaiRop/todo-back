@@ -35,7 +35,8 @@ INSTALLED_APPS = [
     "graphene_django",
     "graphql_auth",
     'graphql_jwt.refresh_token.apps.RefreshTokenConfig',
-    "corsheaders"
+    "corsheaders",
+    'channels',
 ]
 
 MIDDLEWARE = [
@@ -70,6 +71,7 @@ TEMPLATES = [
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 WSGI_APPLICATION = 'config.wsgi.application'
+ASGI_APPLICATION ='config.router.application'
 
 CORS_ALLOW_ALL_ORIGINS = True
 
@@ -83,6 +85,11 @@ DATABASES = {
     }
 }
 
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer"
+    }
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/3.0/ref/settings/#auth-password-validators

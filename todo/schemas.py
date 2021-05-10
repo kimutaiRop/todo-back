@@ -3,6 +3,9 @@ from graphene_django import DjangoObjectType
 from .models import Todo, User
 from graphql_auth.schema import UserQuery, MeQuery
 from graphql_auth import mutations
+import channels_graphql_ws
+import channels
+
 
 class AuthMutation(graphene.ObjectType):
     register = mutations.Register.Field()
@@ -54,7 +57,7 @@ class Query(UserQuery, MeQuery,graphene.ObjectType):
 
 class CreateTodo(graphene.Mutation):
 	todo = graphene.Field(TodoType)
-
+	success = graphene.Boolean()
 	class Arguments:
 		place = graphene.String(required=True)
 		title = graphene.String(required=True)
@@ -62,16 +65,19 @@ class CreateTodo(graphene.Mutation):
 
 	@classmethod
 	def mutate(cls,root,info,place,title,date_time):
-		return CreateTodo(todo=Todo.objects.create(
+		todo=Todo.objects.create(
 			place=place,
 			title = title,
 			date_time=date_time,
 			user=info.context.user
-		))
+		)
+		NotifyTodo.broadcast(payload={"id":todo.id}, group=info.context.user.username)
+		return CreateTodo(success=True)
 
 class UpdateTodo(graphene.Mutation):
 	todo = graphene.Field(TodoType)
-
+	success = graphene.Boolean()
+	
 	class Arguments:
 		id=graphene.Int()
 		place = graphene.String(required=True)
@@ -85,12 +91,59 @@ class UpdateTodo(graphene.Mutation):
 		todo.title = title
 		todo.date_time = date_time
 		todo.save()
+		NotifyTodo.broadcast(payload={"id":todo.id}, group=info.context.user.username)
+		return UpdateTodo(success=True)
 
-		return UpdateTodo(todo=todo)
+
+class NotifyTodo(channels_graphql_ws.Subscription):
+	todo = graphene.Field(TodoType)
+	username = graphene.String(required=True)
+	payload =graphene.JSONString()
+	class Arguments:
+		username = graphene.String(required=True)
+
+	@staticmethod
+	def subscribe(root,info,username):
+		return [username] if username is not None else None
+
+	@staticmethod
+	def publish(payload, info, username):
+		print(payload)
+		return NotifyTodo(username=username ,payload=payload)
+
+
+def demo_middleware(next_middleware, root, info, *args, **kwds):
+    if (
+        info.operation.name is not None
+        and info.operation.name.value != "IntrospectionQuery"
+    ):
+        print("Demo middleware report")
+        print("    operation :", info.operation.operation)
+        print("    name      :", info.operation.name.value)
+
+    return next_middleware(root, info, *args, **kwds)
+
+
+class Subscription(graphene.ObjectType):
+	notify_todo = NotifyTodo.Field()
+
 
 
 class Mutations(AuthMutation, graphene.ObjectType):
 	create_todo = CreateTodo.Field()
 	update_todo = UpdateTodo.Field()
 
-schema = graphene.Schema(query=Query, mutation=Mutations)
+
+schema = graphene.Schema(query=Query, mutation=Mutations, subscription=Subscription)
+
+class MyGraphqlWsConsumer(channels_graphql_ws.GraphqlWsConsumer):
+
+    async def on_connect(self, payload):
+         self.scope["user"] = await channels.auth.get_user(self.scope)
+
+    schema =schema
+    middleware = [demo_middleware]
+
+
+
+
